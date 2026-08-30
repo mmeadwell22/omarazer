@@ -5,6 +5,10 @@ An Omarchy shell bar widget and panel plugin that connects to the OpenRazer daem
 > **Disclaimer:** *This project is an unofficial community plugin for Omarchy. 
 > It is not developed by, endorsed by, affiliated with, or in any way officially connected to [Razer Inc.](https://razer.com) 
 > or the [OpenRazer project](https://openrazer.github.io/).*
+
+> **This is a personal fork** of [asdfsnlr/omarazer](https://github.com/asdfsnlr/omarazer), maintained independently for my own Omarchy setup. It is not a pull request against, and is not synced with, the upstream repo. It currently diverges from upstream by:
+> - Rolling back a broken upstream commit that referenced a `ColorPicker` QML component whose file was never committed, which made the widget fail to load entirely (filed upstream as [asdfsnlr/omarazer#1](https://github.com/asdfsnlr/omarazer/issues/1) — see Updates below).
+> - Adding a `barDisplayMode` setting (Device count / Battery level / Icon only) for the bar widget.
 <p align="center">
   <img src="preview.png" alt="OmaRazer Preview" />
 </p>
@@ -274,6 +278,10 @@ qmllint -I /usr/share/omarchy/shell ./Panel.qml
 ```
 
 ## Updates
+
+### August 30, 2026 (v1.6.0) — fork
+- **Rolled back upstream's broken `ColorPicker` commit**: upstream `main` referenced a `ColorPicker` QML component whose file was never committed, which made the entire bar widget fail to load. Reverted to the last working commit (`0509d18`) and filed [asdfsnlr/omarazer#1](https://github.com/asdfsnlr/omarazer/issues/1) upstream.
+- **Bar Display Mode**: Added a `barDisplayMode` setting (`Device count` / `Battery level` / `Icon only`) so the bar text can show the first battery-powered device's charge percentage instead of the connected device count — useful when you only have one device (e.g. just a mouse). Configurable via `omarchy bar set asdfsnlr.omarazer barDisplayMode "<value>"`, `shell.json`, or a new cycle button in the panel header (labeled *Count* / *Battery* / *Icon*, next to Refresh and Notifications).
 
 ### August 29, 2026 (v1.5.0)
 - **Text-First Interface Redesign**: Streamlined and modernized the user interface by removing non-essential icon glyphs across panel headers, cards, sliders, metric indicators, quick effect controls, action buttons, and modal overlays.

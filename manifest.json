@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "asdfsnlr.omarazer",
   "name": "OmaRazer",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": "asdfsnlr",
   "license": "MIT",
   "description": "An Omarchy shell bar widget and panel plugin that connects to the OpenRazer daemon to monitor and manage connected peripherals (keyboards, mice, mousemats, headsets, and accessories) with battery status, RGB lighting effects, brightness, polling rate, and mouse DPI preset/profile controls.",
