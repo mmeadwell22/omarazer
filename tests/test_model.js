@@ -18,9 +18,28 @@ assert.strictEqual(parsed.device_count, 2);
 assert.strictEqual(parsed.devices.length, 2);
 
 // Test formatBarText with new device bar icon
+assert.strictEqual(Model.formatBarText(parsed, "Device count"), "󰾰 2");
+assert.strictEqual(Model.formatBarText(parsed, "Icon only"), "󰾰");
+assert.strictEqual(Model.formatBarText({ daemon_running: false }, "Device count"), "󰾰 !");
+
+// Legacy boolean mode is still accepted for backward compatibility
 assert.strictEqual(Model.formatBarText(parsed, true), "󰾰 2");
 assert.strictEqual(Model.formatBarText(parsed, false), "󰾰");
-assert.strictEqual(Model.formatBarText({ daemon_running: false }, true), "󰾰 !");
+
+// Test formatBarText battery mode
+const withBattery = Model.parseData(JSON.stringify({
+  daemon_running: true,
+  device_count: 1,
+  devices: [
+    { name: "Razer Viper V3 Pro", type: "mouse", serial: "789", has_battery: true, battery_level: 84, is_charging: false }
+  ]
+}));
+assert.strictEqual(Model.formatBarText(withBattery, "Battery level"), "󰾰 84%");
+assert.strictEqual(Model.formatBarText(parsed, "Battery level"), "󰾰 --"); // no device reports battery
+
+// Test firstBatteryDevice
+assert.strictEqual(Model.firstBatteryDevice(withBattery).serial, "789");
+assert.strictEqual(Model.firstBatteryDevice(parsed), null);
 
 // Test deviceTypeIcon
 assert.strictEqual(Model.deviceTypeIcon("keyboard"), "󰌌");

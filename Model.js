@@ -115,16 +115,55 @@ function batteryColor(level, isCharging) {
 
 /**
  * Format the text shown in the bar widget button.
- * Shows the icon + device count, or just the icon, or icon + "!" on error.
+ * mode: "Device count" (default), "Battery level", or "Icon only".
+ * Also accepts legacy booleans (true = "Device count", false = "Icon only").
  */
-function formatBarText(data, showCount) {
+function formatBarText(data, mode) {
   var icon = "󰾰"
   if (!data || !data.daemon_running) return icon + " !"
-  var count = typeof data.device_count === "number" ? data.device_count : (data.devices ? data.devices.length : 0)
-  if (showCount !== false) {
-    return icon + " " + count
+
+  if (mode === true) mode = "Device count"
+  if (mode === false) mode = "Icon only"
+
+  if (mode === "Battery level") {
+    var dev = firstBatteryDevice(data)
+    if (dev && typeof dev.battery_level === "number") {
+      return icon + " " + dev.battery_level + "%" + (dev.is_charging ? " ⚡" : "")
+    }
+    return icon + " --"
   }
-  return icon
+
+  if (mode === "Icon only") {
+    return icon
+  }
+
+  var count = typeof data.device_count === "number" ? data.device_count : (data.devices ? data.devices.length : 0)
+  return icon + " " + count
+}
+
+/** The ordered list of valid bar display modes, for cycling and validation. */
+var BAR_DISPLAY_MODES = ["Device count", "Battery level", "Icon only"]
+
+/** Short label for the header cycle button (kept compact for the button chrome). */
+function barDisplayModeShortLabel(mode) {
+  if (mode === "Battery level") return "Battery"
+  if (mode === "Icon only") return "Icon"
+  return "Count"
+}
+
+/** Return the next bar display mode after `mode`, wrapping around. */
+function nextBarDisplayMode(mode) {
+  var idx = BAR_DISPLAY_MODES.indexOf(mode)
+  return BAR_DISPLAY_MODES[(idx + 1) % BAR_DISPLAY_MODES.length]
+}
+
+/** Return the first connected device that reports battery capability, or null. */
+function firstBatteryDevice(data) {
+  if (!data || !Array.isArray(data.devices)) return null
+  for (var i = 0; i < data.devices.length; i++) {
+    if (data.devices[i] && data.devices[i].has_battery) return data.devices[i]
+  }
+  return null
 }
 
 /** Capitalize the first letter of a device type string (e.g. "keyboard" -> "Keyboard"). */
@@ -903,6 +942,9 @@ if (typeof module !== "undefined") {
     batteryIcon: batteryIcon,
     batteryColor: batteryColor,
     formatBarText: formatBarText,
+    firstBatteryDevice: firstBatteryDevice,
+    barDisplayModeShortLabel: barDisplayModeShortLabel,
+    nextBarDisplayMode: nextBarDisplayMode,
     formatDeviceType: formatDeviceType,
     formatDpi: formatDpi,
     defaultDpiPresets: defaultDpiPresets,

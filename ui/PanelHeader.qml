@@ -13,9 +13,11 @@ RowLayout {
   property color dim: Qt.darker(fg, 1.45)
   property var razerData: ({})
   property bool notificationsEnabled: true
+  property string barDisplayMode: "Device count"
 
   signal refreshRequested()
   signal notificationsToggled()
+  signal barDisplayModeCycled()
 
   Layout.fillWidth: true
   spacing: Style.space(10)
@@ -40,6 +42,18 @@ RowLayout {
       elide: Text.ElideRight
       Layout.fillWidth: true
     }
+  }
+
+  Button {
+    text: Model.barDisplayModeShortLabel(root.barDisplayMode)
+    tooltipText: "Bar shows: " + root.barDisplayMode + " (click to cycle)"
+    foreground: root.fg
+    fontFamily: root.fontFamily
+    fontSize: Style.font.body
+    horizontalPadding: Style.spacing.controlPaddingX
+    verticalPadding: Style.spacing.controlPaddingY
+    bordered: true
+    onClicked: root.barDisplayModeCycled()
   }
 
   Button {

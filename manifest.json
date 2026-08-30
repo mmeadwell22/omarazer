@@ -21,7 +21,7 @@
     "defaults": {
       "pollIntervalSec": 30,
       "refreshIntervalSec": 30,
-      "showCountInBar": true,
+      "barDisplayMode": "Device count",
       "enableNotifications": true
     },
     "schema": [
@@ -44,10 +44,12 @@
         "defaultValue": 30
       },
       {
-        "key": "showCountInBar",
-        "type": "boolean",
-        "label": "Show device count in bar",
-        "defaultValue": true
+        "key": "barDisplayMode",
+        "type": "enum",
+        "label": "Bar display",
+        "options": ["Device count", "Battery level", "Icon only"],
+        "defaultValue": "Device count",
+        "description": "What to show next to the icon in the bar: connected device count, the first battery-powered device's charge level, or just the icon."
       },
       {
         "key": "enableNotifications",

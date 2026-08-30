@@ -104,10 +104,10 @@ Panel {
   /** Poll interval in seconds (from user settings, default 30). */
   readonly property int pollInterval: Model.getPollInterval(root.settings, 30)
 
-  /** Whether to show device count text in the bar button. */
-  readonly property bool showCountInBar: {
-    var v = settings ? settings.showCountInBar : undefined
-    return v === undefined || v === null ? true : v === true
+  /** What to display next to the icon in the bar button: "Device count", "Battery level", or "Icon only". */
+  readonly property string barDisplayMode: {
+    var v = settings ? settings.barDisplayMode : undefined
+    return (v === undefined || v === null || v === "") ? "Device count" : v
   }
 
   /** Whether connect/disconnect notifications are enabled in settings. */
@@ -158,6 +158,13 @@ Panel {
   }
 
   // ── Notifications ─────────────────────────────────────────────────────────
+
+  /** Cycle the bar's display mode (count → battery → icon only → …) and persist it. */
+  function cycleBarDisplayMode() {
+    var next = Model.nextBarDisplayMode(root.barDisplayMode)
+    barModeProc.command = ["omarchy-bar", "set", "asdfsnlr.omarazer", "barDisplayMode", next]
+    barModeProc.running = true
+  }
 
   /** Send a freedesktop desktop notification for a device connect/disconnect event. */
   function sendDeviceNotification(change) {
@@ -430,6 +437,9 @@ Panel {
   /** Runs notify-send for desktop notifications. */
   Process { id: notifyProc }
 
+  /** Persists a bar display mode change via the omarchy-bar CLI. */
+  Process { id: barModeProc }
+
   /** Periodic refresh timer — polls the daemon at the configured interval. */
   Timer {
     id: pollTimer
@@ -445,9 +455,9 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: Model.formatBarText(root.razerData, root.showCountInBar)
-    fixedWidth: root.showCountInBar ? -1 : (root.bar && root.bar.vertical ? -1 : Style.space(27))
-    fixedHeight: root.showCountInBar ? -1 : (root.bar && root.bar.vertical ? Style.space(26) : -1)
+    text: Model.formatBarText(root.razerData, root.barDisplayMode)
+    fixedWidth: root.barDisplayMode !== "Icon only" ? -1 : (root.bar && root.bar.vertical ? -1 : Style.space(27))
+    fixedHeight: root.barDisplayMode !== "Icon only" ? -1 : (root.bar && root.bar.vertical ? Style.space(26) : -1)
     tooltipText: root.tooltipText
     onPressed: function(b) { root.triggerPress(b) }
   }
@@ -487,9 +497,11 @@ Panel {
           fg: root.fg
           razerData: root.razerData
           notificationsEnabled: root.notificationsEnabled
+          barDisplayMode: root.barDisplayMode
           Layout.fillWidth: true
           onRefreshRequested: root.refresh()
           onNotificationsToggled: root.notificationsEnabled = !root.notificationsEnabled
+          onBarDisplayModeCycled: root.cycleBarDisplayMode()
         }
 
         // ── Global Controls: Quick-effect buttons + global brightness slider ──

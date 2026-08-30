@@ -118,7 +118,7 @@ rm -rf ~/.config/omarchy/plugins/asdfsnlr.omarazer
 The widget supports configuration via Omarchy plugin settings (`manifest.json` schema) and the Omarchy bar CLI:
 
 - `pollIntervalSec` / `refreshIntervalSec` (*integer*, default: `30`): Polling and refresh interval in seconds to refresh device status (min: `5`, max: `300`).
-- `showCountInBar` (*boolean*, default: `true`): Whether to show the connected device count next to the icon in the bar.
+- `barDisplayMode` (*enum*: `Device count` | `Battery level` | `Icon only`, default: `Device count`): What to show next to the icon in the bar. `Battery level` shows the charge percentage of the first connected device that reports a battery.
 
 ### Changing the Refresh Interval
 
@@ -148,7 +148,7 @@ Add `pollIntervalSec` (or `refreshIntervalSec`) directly to your OmaRazer bar la
         {
           "id": "asdfsnlr.omarazer",
           "pollIntervalSec": 15,
-          "showCountInBar": true
+          "barDisplayMode": "Battery level"
         }
       ]
     }
