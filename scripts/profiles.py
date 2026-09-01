@@ -166,3 +166,51 @@ def delete_dpi_profile(name: str) -> bool:
         sys.stderr.write(f"Failed to delete DPI profile: {e}\n")
         return False
 
+
+
+# ── Per-Device Presets ───────────────────────────────────────────────────────
+# Fallback store for mice without on-board DPI stage memory. Devices that do
+# have `dpi_stages` keep their presets in firmware instead — see
+# effects.apply_dpi_preset().
+
+
+def get_device_presets_path() -> str:
+    """Return the path to the per-device preset store, creating its dir."""
+    config_dir = os.path.join(os.path.expanduser("~"), ".config", "omarazer")
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "device_presets.json")
+
+
+def load_device_presets() -> dict[str, list[int]]:
+    """Return the whole serial -> presets map, or {} if unreadable."""
+    try:
+        with open(get_device_presets_path(), "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        return {
+            str(k): [int(x) for x in v]
+            for k, v in data.items()
+            if isinstance(v, list) and v
+        }
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        sys.stderr.write(f"Failed to load device presets: {e}\n")
+        return {}
+
+
+def save_device_presets(serial: str, presets: list[int]) -> bool:
+    """Merge one device's presets into the store and write it back."""
+    if not serial:
+        sys.stderr.write("Error: empty device serial\n")
+        return False
+    data = load_device_presets()
+    data[str(serial)] = [int(p) for p in presets]
+    try:
+        with open(get_device_presets_path(), "w") as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        sys.stderr.write(f"Failed to save device presets: {e}\n")
+        return False
