@@ -282,3 +282,52 @@ def set_effect(
                 sys.stderr.write(f"Failed to set effect {eff} on {dev.name}: {e}\n")
 
     return found
+
+
+def apply_dpi_preset(
+    serial: str, dpi: int, stages: list[int] | None = None
+) -> bool:
+    """Set active DPI, committing the preset list to on-board memory when supported.
+
+    Mice with `dpi_stages` keep their stage list and active stage in firmware, so
+    writing there is what makes presets survive a reboot. Devices without that
+    capability fall back to a plain DPI set (persistence handled on disk).
+    """
+    dpi = int(dpi)
+    stages = [int(s) for s in (stages or [])]
+
+    if not stages:
+        return set_dpi(serial, dpi, dpi)
+
+    try:
+        dm = _connect()
+    except Exception as e:
+        sys.stderr.write(f"Error connecting to OpenRazer daemon: {e}\n")
+        return False
+
+    found = False
+    for dev in dm.devices:
+        dev_serial = str(safe_get(dev, "serial", ""))
+        if serial.lower() != "all" and dev_serial.lower() != serial.lower():
+            continue
+
+        if not (hasattr(dev, "has") and dev.has("dpi_stages")):
+            # No on-board stage memory — just set the DPI.
+            found = set_dpi(dev_serial, dpi, dpi) or found
+            continue
+
+        # Active stage is 1-based; fall back to stage 1 for a DPI that is not
+        # one of the presets, then set that DPI explicitly on top.
+        try:
+            active = stages.index(dpi) + 1
+        except ValueError:
+            active = 1
+
+        if not set_dpi_stages(dev_serial, active, list(stages)):
+            continue
+        found = True
+
+        if dpi not in stages:
+            set_dpi(dev_serial, dpi, dpi)
+
+    return found

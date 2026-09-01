@@ -81,6 +81,13 @@ Panel {
   /** Map of serial -> current active DPI value (for reactive UI selection). */
   property var deviceDpi: ({})
 
+  /** Map of serial -> true when the mouse keeps DPI presets in on-board memory. */
+  property var deviceStageCapable: ({})
+
+  /** Remaining fast retries for a device that reports stage support but no
+      stages yet — a wireless mouse is often not ready on the first poll. */
+  property int stageReadRetries: 5
+
   /** Map of serial -> effect name for locally-selected effects (before apply). */
   property var deviceEffects: ({})
 
@@ -139,17 +146,39 @@ Panel {
         sendDeviceNotification(changes[i])
     }
     prevDeviceMap = Model.buildDeviceMap(parsed.devices || [])
-    // Sync deviceDpi from daemon devices if not overridden locally
+    // Sync DPI and presets from the daemon. A mouse with on-board stage memory
+    // is the source of truth for its own presets, so the firmware list wins.
     if (parsed && Array.isArray(parsed.devices)) {
       var dMap = Object.assign({}, root.deviceDpi)
+      var pMap = Object.assign({}, root.deviceDpiPresets)
+      var sMap = Object.assign({}, root.deviceStageCapable)
+      var stagesPending = false
       for (var j = 0; j < parsed.devices.length; j++) {
         var d = parsed.devices[j]
-        if (d && d.serial && d.has_dpi && d.dpi) {
+        if (!d || !d.serial) continue
+        if (d.has_dpi && d.dpi) {
           var dpiVal = Array.isArray(d.dpi) ? d.dpi[0] : d.dpi
           dMap[d.serial] = Number(dpiVal)
         }
+        if (d.has_dpi_stages && Array.isArray(d.hardware_dpi_stages)
+            && d.hardware_dpi_stages.length > 0) {
+          sMap[d.serial] = true
+          pMap[d.serial] = d.hardware_dpi_stages.slice()
+        } else if (d.has_dpi_stages && !pMap[d.serial]) {
+          // Capability is advertised but the list came back empty — the device
+          // is not awake yet. Retry soon rather than showing generic defaults
+          // for a whole poll interval.
+          stagesPending = true
+        }
       }
       root.deviceDpi = dMap
+      root.deviceDpiPresets = pMap
+      root.deviceStageCapable = sMap
+
+      if (stagesPending && root.stageReadRetries > 0) {
+        root.stageReadRetries--
+        stageRetryTimer.restart()
+      }
     }
     razerData = parsed
     dataVersion++
@@ -239,6 +268,17 @@ Panel {
       })
       root.razerData = copy
       root.dataVersion++
+    }
+
+    // On a stage-capable mouse, commit the preset list and the active stage to
+    // firmware in the same call so the selection survives a reboot unaided.
+    var stages = root.deviceDpiPresets[serial]
+    if (root.deviceStageCapable[serial] && Array.isArray(stages) && stages.length > 0) {
+      var stageArgs = ["python3", pathFromUrl(Qt.resolvedUrl("scripts/razer_devices.py")), "--apply-dpi-preset", String(serial), String(valX)]
+      for (var k = 0; k < stages.length; k++) stageArgs.push(String(stages[k]))
+      actionProc.command = stageArgs
+      actionProc.running = true
+      return
     }
 
     var args = ["python3", pathFromUrl(Qt.resolvedUrl("scripts/razer_devices.py")), "--set-dpi", String(serial), String(valX)]
@@ -390,12 +430,44 @@ Panel {
     refresh()
   }
 
-  /** Update the active presets list for a device. */
+  /** Update the active presets list for a device and persist it.
+
+      Stage-capable mice commit their list to firmware when a DPI is applied;
+      anything else is written to the on-disk store so it survives a restart. */
   function setDeviceDpiPresets(serial, presets) {
     if (!serial) return
     var copy = Object.assign({}, root.deviceDpiPresets)
     copy[serial] = presets
     root.deviceDpiPresets = copy
+
+    if (!root.deviceStageCapable[serial] && Array.isArray(presets) && presets.length > 0) {
+      var args = ["python3", pathFromUrl(Qt.resolvedUrl("scripts/razer_devices.py")), "--save-device-presets", String(serial)]
+      for (var i = 0; i < presets.length; i++) args.push(String(presets[i]))
+      presetSaveProc.command = args
+      presetSaveProc.running = true
+    }
+  }
+
+  /** Merge the on-disk preset store in, leaving firmware-backed devices alone. */
+  function mergeStoredPresets(raw) {
+    if (!raw) return
+    var stored = null
+    try {
+      stored = JSON.parse(raw)
+    } catch (e) {
+      return
+    }
+    if (!stored || typeof stored !== "object") return
+    var copy = Object.assign({}, root.deviceDpiPresets)
+    var changed = false
+    for (var serial in stored) {
+      if (root.deviceStageCapable[serial]) continue
+      if (Array.isArray(stored[serial]) && stored[serial].length > 0) {
+        copy[serial] = stored[serial]
+        changed = true
+      }
+    }
+    if (changed) root.deviceDpiPresets = copy
   }
 
 
@@ -408,6 +480,7 @@ Panel {
   }
 
   Component.onCompleted: {
+    presetLoadProc.running = true
     refresh()
   }
 
@@ -439,6 +512,27 @@ Panel {
 
   /** Persists a bar display mode change via the omarchy-bar CLI. */
   Process { id: barModeProc }
+
+  /** Persists per-device DPI presets for mice without on-board stage memory. */
+  Process { id: presetSaveProc }
+
+  /** Loads the on-disk per-device preset store at startup. */
+  Process {
+    id: presetLoadProc
+    command: ["python3", pathFromUrl(Qt.resolvedUrl("scripts/razer_devices.py")), "--get-device-presets"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.mergeStoredPresets(text)
+    }
+  }
+
+  /** Short retry after a poll that found a stage-capable mouse still asleep. */
+  Timer {
+    id: stageRetryTimer
+    interval: 2000
+    repeat: false
+    onTriggered: root.refresh()
+  }
 
   /** Periodic refresh timer — polls the daemon at the configured interval. */
   Timer {
@@ -668,8 +762,9 @@ Panel {
     activePresets: root.deviceDpiPresets[root.dpiDeviceSerial] || Model.defaultDpiPresets()
     onCloseRequested: root.closeDpiEditor()
     onApplied: function(serial, dpi, presets) {
-      root.setDpi(serial, dpi)
+      // Presets first: setDpi reads the map to build the firmware stage write.
       if (presets) root.setDeviceDpiPresets(serial, presets)
+      root.setDpi(serial, dpi)
     }
     onPresetsUpdated: function(serial, presets) {
       root.setDeviceDpiPresets(serial, presets)
