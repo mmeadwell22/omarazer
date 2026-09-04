@@ -5,7 +5,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.helpers import safe_get, classify_device_type, normalize_effect_name
+from scripts.helpers import (
+    safe_get,
+    classify_device_type,
+    normalize_effect_name,
+    normalize_battery_level,
+)
+from scripts.profiles import load_battery_level, save_battery_level
 
 
 def get_device_info(device: Any, daemon_version: str = "") -> dict[str, Any]:
@@ -13,15 +19,30 @@ def get_device_info(device: Any, daemon_version: str = "") -> dict[str, Any]:
     caps: dict[str, Any] = safe_get(device, "capabilities", {}) or {}
 
     # Battery
+    #
+    # OpenRazer answers 0 for a device that is asleep or otherwise unreachable,
+    # so a 0 is treated as "no reading" and the last known level is shown
+    # instead. Charging state is always read live — a stale "Charging" badge
+    # after the cable comes out is worse than briefly missing one.
     has_battery = bool(caps.get("battery", False))
     battery_level: int | None = None
+    battery_stale = False
     is_charging: bool | None = None
     if has_battery:
         try:
-            b = device.battery_level
-            battery_level = int(b) if b is not None else None
+            battery_level = normalize_battery_level(device.battery_level)
         except (NotImplementedError, Exception):
             battery_level = None
+
+        cache_key = str(safe_get(device, "name", "") or "")
+        if battery_level is None:
+            cached = load_battery_level(cache_key)
+            if cached is not None:
+                battery_level = cached
+                battery_stale = True
+        else:
+            save_battery_level(cache_key, battery_level)
+
         try:
             c = device.is_charging
             is_charging = bool(c) if c is not None else None
@@ -181,6 +202,7 @@ def get_device_info(device: Any, daemon_version: str = "") -> dict[str, Any]:
         "driver_version": driver_version,
         "has_battery": has_battery,
         "battery_level": battery_level,
+        "battery_stale": battery_stale,
         "is_charging": is_charging,
         "has_brightness": has_brightness,
         "brightness": brightness,

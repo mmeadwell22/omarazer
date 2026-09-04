@@ -15,6 +15,22 @@ def safe_get(obj: Any, attr: str, default: Any = None) -> Any:
         return default
 
 
+def normalize_battery_level(raw: Any) -> int | None:
+    """Return a real battery percentage, or None when the firmware did not answer.
+
+    OpenRazer reports 0 for a device that is asleep or otherwise unreachable
+    rather than raising, and a genuinely empty wireless device cannot report at
+    all — so 0 always means "no reading", never "empty".
+    """
+    try:
+        level = int(float(raw))
+    except (TypeError, ValueError):
+        return None
+    if level <= 0:
+        return None
+    return min(level, 100)
+
+
 def normalize_effect_name(name: str) -> str:
     """Normalize effect name from daemon/CLI to standard lowercase identifier."""
     n = str(name or "").strip().lower().replace("-", "_")

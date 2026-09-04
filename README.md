@@ -30,7 +30,7 @@ An Omarchy shell bar widget and panel plugin that connects to the OpenRazer daem
 
 - **Device Discovery & Status**: Automatically detects all connected Razer devices via the OpenRazer daemon.
 - **Hardware Telemetry**: Displays device names, device types, serial numbers, and firmware versions.
-- **Battery Monitoring**: Live battery percentage and charging state indicators with color-coded levels for wireless devices.
+- **Battery Monitoring**: Live battery percentage and charging state indicators with color-coded levels for wireless devices. A sleeping device keeps showing its last known level (cached to disk) instead of dropping to `0%`, and charging shows as `97% ⚡ Charging`.
 - **Mouse DPI Sensitivity & Profile Management**:
   - **Quick-Switch Step Buttons**: Direct 1-click DPI switching on mouse cards (`800`, `1200`, `1800`, `2400`, `3200`, etc.) with instant active step visual highlighting.
   - **Dedicated DPI Preset Editor**: Full-screen overlay window with live sensitivity slider (100 to device `max_dpi`), fine-tuning nudge buttons (`-500`, `-100`, `+100`, `+500`), and live readout.
@@ -122,6 +122,7 @@ rm -rf ~/.config/omarchy/plugins/asdfsnlr.omarazer
 The widget supports configuration via Omarchy plugin settings (`manifest.json` schema) and the Omarchy bar CLI:
 
 - `pollIntervalSec` / `refreshIntervalSec` (*integer*, default: `30`): Polling and refresh interval in seconds to refresh device status (min: `5`, max: `300`).
+- `idlePollIntervalSec` (*integer*, default: `300`): Refresh interval in seconds while the panel is **closed** (min: `30`, max: `3600`). Never polls faster than `pollIntervalSec`.
 - `barDisplayMode` (*enum*: `Device count` | `Battery level` | `Icon only`, default: `Device count`): What to show next to the icon in the bar. `Battery level` shows the charge percentage of the first connected device that reports a battery.
 
 ### Changing the Refresh Interval
@@ -152,6 +153,7 @@ Add `pollIntervalSec` (or `refreshIntervalSec`) directly to your OmaRazer bar la
         {
           "id": "asdfsnlr.omarazer",
           "pollIntervalSec": 15,
+          "idlePollIntervalSec": 300,
           "barDisplayMode": "Battery level"
         }
       ]
@@ -244,7 +246,18 @@ Named `<profile-name>.json` (with unsafe characters sanitized).
 - `colors` — flat array of hex color strings (`#RRGGBB`), one per LED, in row-major order (total length = `rows × cols`).
 - Loading a profile validates that the stored dimensions match the device's current matrix before applying.
 
-### 2. Mouse DPI Profiles (`~/.config/omarazer/dpi_profiles/`)
+### 2. Battery Cache (`~/.config/omarazer/battery_cache.json`)
+Last known battery level per device, written only when the level changes.
+
+```json
+{
+  "Razer Viper V3 Pro (Wireless)": { "level": 97 }
+}
+```
+
+Keyed by device **name**, not serial: OpenRazer synthesises a serial (`UNKNOWN_<vid><pid>_0000`) when a device is asleep at daemon startup, so serials are not stable across daemon restarts.
+
+### 3. Mouse DPI Profiles (`~/.config/omarazer/dpi_profiles/`)
 Named `<profile-name>.json` (with unsafe characters sanitized).
 
 ```json
@@ -264,7 +277,7 @@ Named `<profile-name>.json` (with unsafe characters sanitized).
 Run the test suites and validations:
 
 ```bash
-# Run Python unit tests
+# Run Python unit tests (isolated from ~/.config/omarazer via OMARAZER_CONFIG_DIR)
 python3 -m unittest discover tests
 
 # Run JavaScript Model tests
@@ -278,6 +291,12 @@ qmllint -I /usr/share/omarchy/shell ./Panel.qml
 ```
 
 ## Updates
+
+### September 4, 2026 (v1.7.0) — fork
+- **Sleep-safe battery reporting**: OpenRazer answers `0` for a device that is asleep or otherwise unreachable, and OmaRazer used to render that as a real `0%`. A `0` is now treated as "no reading" and the last known level is shown instead, cached in `~/.config/omarazer/battery_cache.json` so it survives a shell restart. Charging state is always read live and never restored from cache.
+- **Clearer charging badge**: device cards now read `97% ⚡ Charging` (was `97% (Charging)`), matching the `⚡` the bar widget already used.
+- **Idle polling backoff**: the poll timer now runs at `pollIntervalSec` only while the panel is open, backing off to `idlePollIntervalSec` (default `300`) while it is closed. The bar only needs a battery level and a device count, so a full device read every 30s around the clock bought nothing — this cuts ~2,880 polls/day to ~290. Opening the panel always refreshes immediately. Trade-off: device connect/disconnect notifications can lag by up to the idle interval while the panel is closed.
+- **Hermetic tests**: `profiles.py` honours an `OMARAZER_CONFIG_DIR` environment override so the test suite no longer reads and writes the real `~/.config/omarazer/`.
 
 ### August 30, 2026 (v1.6.0) — fork
 - **Rolled back upstream's broken `ColorPicker` commit**: upstream `main` referenced a `ColorPicker` QML component whose file was never committed, which made the entire bar widget fail to load. Reverted to the last working commit (`0509d18`) and filed [asdfsnlr/omarazer#1](https://github.com/asdfsnlr/omarazer/issues/1) upstream.

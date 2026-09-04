@@ -190,5 +190,39 @@ assert.strictEqual(Model.getPollInterval({ pollIntervalSec: 2 }, 30), 30);
 assert.strictEqual(Model.getPollInterval({ pollIntervalSec: 5000 }, 30), 30);
 assert.strictEqual(Model.getPollInterval({ pollIntervalSec: 10, refreshIntervalSec: 25 }), 10);
 
+// Test batteryBadgeText
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: 97, is_charging: false }), "97%");
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: 97, is_charging: true }), "97% \u26a1 Charging");
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: 5, is_charging: true }), "5% \u26a1 Charging");
+
+// A device with no usable reading and nothing cached renders no badge at all
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: null, is_charging: false }), "");
+assert.strictEqual(Model.batteryBadgeText({ has_battery: false, battery_level: 97, is_charging: false }), "");
+assert.strictEqual(Model.batteryBadgeText(null), "");
+
+// Charging with no level still tells you it is charging
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: null, is_charging: true }), "\u26a1 Charging");
+
+// A stale (cached) level renders exactly like a live one
+assert.strictEqual(Model.batteryBadgeText({ has_battery: true, battery_level: 97, is_charging: false, battery_stale: true }), "97%");
+
+// Test getIdlePollInterval — the interval used while the panel is closed
+assert.strictEqual(Model.getIdlePollInterval(undefined), 300);
+assert.strictEqual(Model.getIdlePollInterval({}), 300);
+assert.strictEqual(Model.getIdlePollInterval({ idlePollIntervalSec: 600 }), 600);
+assert.strictEqual(Model.getIdlePollInterval({ idlePollIntervalSec: "600" }), 600);
+assert.strictEqual(Model.getIdlePollInterval({ idlePollIntervalSec: 1 }), 300);
+assert.strictEqual(Model.getIdlePollInterval({ idlePollIntervalSec: 99999 }), 300);
+
+// Test effectivePollInterval — open uses the live interval, closed backs off
+assert.strictEqual(Model.effectivePollInterval({ pollIntervalSec: 30, idlePollIntervalSec: 300 }, true), 30);
+assert.strictEqual(Model.effectivePollInterval({ pollIntervalSec: 30, idlePollIntervalSec: 300 }, false), 300);
+assert.strictEqual(Model.effectivePollInterval({}, true), 30);
+assert.strictEqual(Model.effectivePollInterval({}, false), 300);
+assert.strictEqual(Model.effectivePollInterval(undefined, false), 300);
+
+// A closed panel never polls more often than an open one, even if misconfigured
+assert.strictEqual(Model.effectivePollInterval({ pollIntervalSec: 120, idlePollIntervalSec: 60 }, false), 120);
+
 console.log("All Model.js tests passed!");
 

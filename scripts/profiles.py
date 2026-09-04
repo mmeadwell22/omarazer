@@ -9,9 +9,22 @@ import sys
 from typing import Any
 
 
+def get_config_dir() -> str:
+    """Return the OmaRazer config dir, creating it if needed.
+
+    Defaults to ~/.config/omarazer/. Set OMARAZER_CONFIG_DIR to redirect it —
+    the test suite uses that to stay out of the real user config.
+    """
+    config_dir = os.environ.get("OMARAZER_CONFIG_DIR") or os.path.join(
+        os.path.expanduser("~"), ".config", "omarazer"
+    )
+    os.makedirs(config_dir, exist_ok=True)
+    return config_dir
+
+
 def get_profiles_dir() -> str:
-    """Return ~/.config/omarazer/profiles/, creating it if needed."""
-    profiles_dir = os.path.join(os.path.expanduser("~"), ".config", "omarazer", "profiles")
+    """Return the per-key lighting profiles dir, creating it if needed."""
+    profiles_dir = os.path.join(get_config_dir(), "profiles")
     os.makedirs(profiles_dir, exist_ok=True)
     return profiles_dir
 
@@ -92,8 +105,8 @@ DEFAULT_DPI_PROFILES: dict[str, dict[str, Any]] = {
 
 
 def get_dpi_profiles_dir() -> str:
-    """Return ~/.config/omarazer/dpi_profiles/, creating it if needed."""
-    dpi_profiles_dir = os.path.join(os.path.expanduser("~"), ".config", "omarazer", "dpi_profiles")
+    """Return the mouse DPI profiles dir, creating it if needed."""
+    dpi_profiles_dir = os.path.join(get_config_dir(), "dpi_profiles")
     os.makedirs(dpi_profiles_dir, exist_ok=True)
     return dpi_profiles_dir
 
@@ -176,9 +189,7 @@ def delete_dpi_profile(name: str) -> bool:
 
 def get_device_presets_path() -> str:
     """Return the path to the per-device preset store, creating its dir."""
-    config_dir = os.path.join(os.path.expanduser("~"), ".config", "omarazer")
-    os.makedirs(config_dir, exist_ok=True)
-    return os.path.join(config_dir, "device_presets.json")
+    return os.path.join(get_config_dir(), "device_presets.json")
 
 
 def load_device_presets() -> dict[str, list[int]]:
@@ -213,4 +224,71 @@ def save_device_presets(serial: str, presets: list[int]) -> bool:
         return True
     except Exception as e:
         sys.stderr.write(f"Failed to save device presets: {e}\n")
+        return False
+
+
+# ── Battery cache ────────────────────────────────────────────────────────────
+# Last known battery level per device, so a sleeping device keeps showing its
+# real charge instead of the 0 the firmware reports when it does not answer.
+
+
+def get_battery_cache_path() -> str:
+    """Return the path to the last-known battery level store."""
+    return os.path.join(get_config_dir(), "battery_cache.json")
+
+
+def load_battery_cache() -> dict[str, int]:
+    """Return the whole device key -> level map, or {} if unreadable."""
+    try:
+        with open(get_battery_cache_path(), "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        out: dict[str, int] = {}
+        for k, v in data.items():
+            level = v.get("level") if isinstance(v, dict) else v
+            try:
+                out[str(k)] = int(level)
+            except (TypeError, ValueError):
+                continue
+        return out
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        sys.stderr.write(f"Failed to load battery cache: {e}\n")
+        return {}
+
+
+def load_battery_level(key: str) -> int | None:
+    """Return the last known battery level for a device, or None."""
+    if not key:
+        return None
+    return load_battery_cache().get(str(key))
+
+
+def save_battery_level(key: str, level: Any) -> bool:
+    """Record a device's battery level, skipping the write when unchanged.
+
+    Keyed by device name rather than serial: OpenRazer synthesises a serial
+    when a device is asleep at daemon start, so serials are not stable across
+    daemon restarts — see the DPI preset store for the same hazard.
+    """
+    if not key:
+        return False
+    try:
+        value = int(level)
+    except (TypeError, ValueError):
+        return False
+
+    cache = load_battery_cache()
+    if cache.get(str(key)) == value:
+        return True
+
+    cache[str(key)] = value
+    try:
+        with open(get_battery_cache_path(), "w") as f:
+            json.dump({k: {"level": v} for k, v in cache.items()}, f, indent=2)
+        return True
+    except Exception as e:
+        sys.stderr.write(f"Failed to save battery cache: {e}\n")
         return False
