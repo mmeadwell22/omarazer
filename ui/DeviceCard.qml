@@ -118,11 +118,11 @@ ColumnLayout {
 
     // Battery Indicator (if present)
     RowLayout {
-      visible: root.modelData.has_battery && root.modelData.battery_level !== null
+      visible: Model.batteryBadgeText(root.modelData) !== ""
       spacing: Style.space(4)
 
       Text {
-        text: (root.modelData.battery_level !== null ? root.modelData.battery_level + "%" : "") + (root.modelData.is_charging ? " (Charging)" : "")
+        text: Model.batteryBadgeText(root.modelData)
         color: Model.batteryColor(root.modelData.battery_level, root.modelData.is_charging)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

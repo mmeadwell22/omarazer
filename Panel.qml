@@ -108,8 +108,14 @@ Panel {
   readonly property color dim: Qt.darker(fg, 1.45)
   readonly property string fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
 
-  /** Poll interval in seconds (from user settings, default 30). */
+  /** Poll interval in seconds while the panel is open (from user settings, default 30). */
   readonly property int pollInterval: Model.getPollInterval(root.settings, 30)
+
+  /** Interval the poll timer actually uses: the full rate while the panel is
+      open, backed off to idlePollIntervalSec (default 300s) while it is closed.
+      The bar only needs a battery level and a device count, so polling the
+      hardware every 30s around the clock buys nothing. */
+  readonly property int activePollInterval: Model.effectivePollInterval(root.settings, root.opened)
 
   /** What to display next to the icon in the bar button: "Device count", "Battery level", or "Icon only". */
   readonly property string barDisplayMode: {
@@ -534,10 +540,11 @@ Panel {
     onTriggered: root.refresh()
   }
 
-  /** Periodic refresh timer — polls the daemon at the configured interval. */
+  /** Periodic refresh timer — polls the daemon at the configured interval,
+      backing off automatically while the panel is closed. */
   Timer {
     id: pollTimer
-    interval: root.pollInterval * 1000
+    interval: root.activePollInterval * 1000
     running: true
     repeat: true
     onTriggered: root.refresh()

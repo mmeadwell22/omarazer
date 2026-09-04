@@ -98,6 +98,23 @@ function batteryIcon(level, isCharging) {
   return "󰂎"
 }
 
+/**
+ * Return the battery badge text for a device card, e.g. "97%" or
+ * "97% \u26a1 Charging". Empty string when the device has no battery or no
+ * usable reading, so the caller can hide the badge entirely.
+ *
+ * A cached (stale) level is rendered exactly like a live one \u2014 a sleeping
+ * mouse still has the charge it went to sleep with.
+ */
+function batteryBadgeText(device) {
+  if (!device || !device.has_battery) return ""
+  var level = device.battery_level
+  var hasLevel = typeof level === "number" && isFinite(level) && level > 0
+  var charging = !!device.is_charging
+  if (!hasLevel) return charging ? "\u26a1 Charging" : ""
+  return charging ? level + "% \u26a1 Charging" : level + "%"
+}
+
 /** Return a color hex string for battery level (green/yellow/red). */
 function batteryColor(level, isCharging) {
   if (isCharging) return "#22c55e"
@@ -112,6 +129,34 @@ function batteryColor(level, isCharging) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BAR BUTTON FORMATTING
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Poll interval in seconds used while the panel is CLOSED, from user settings.
+ * The bar only needs a battery percentage and a device count, so it backs off
+ * hard rather than doing a full device read every 30 seconds all day.
+ */
+function getIdlePollInterval(settings, defaultVal) {
+  var d = (typeof defaultVal === "number" && defaultVal >= 5) ? defaultVal : 300
+  if (!settings || typeof settings !== "object") return d
+  var v = settings.idlePollIntervalSec
+  if (typeof v === "number" && v >= 30 && v <= 3600) return Math.round(v)
+  if (typeof v === "string") {
+    var n = parseInt(v, 10)
+    if (!isNaN(n) && n >= 30 && n <= 3600) return n
+  }
+  return d
+}
+
+/**
+ * The interval the poll timer should actually use, given whether the panel is
+ * open. Never returns an idle interval shorter than the open one — a closed
+ * panel polling more eagerly than an open one would be nonsense.
+ */
+function effectivePollInterval(settings, panelOpen) {
+  var active = getPollInterval(settings, 30)
+  if (panelOpen) return active
+  return Math.max(active, getIdlePollInterval(settings, 300))
+}
 
 /**
  * Format the text shown in the bar widget button.
@@ -941,6 +986,7 @@ if (typeof module !== "undefined") {
     deviceTypeIcon: deviceTypeIcon,
     batteryIcon: batteryIcon,
     batteryColor: batteryColor,
+    batteryBadgeText: batteryBadgeText,
     formatBarText: formatBarText,
     firstBatteryDevice: firstBatteryDevice,
     barDisplayModeShortLabel: barDisplayModeShortLabel,
@@ -959,6 +1005,8 @@ if (typeof module !== "undefined") {
     averageBrightness: averageBrightness,
     formatBrightness: formatBrightness,
     getPollInterval: getPollInterval,
+    getIdlePollInterval: getIdlePollInterval,
+    effectivePollInterval: effectivePollInterval,
     summaryText: summaryText,
     paletteColors: paletteColors,
     primaryColor: primaryColor,
